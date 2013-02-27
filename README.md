@@ -48,4 +48,7 @@ For Fedora:
 
 
 
-    
+License
+-------
+
+BSD 2-Clause
