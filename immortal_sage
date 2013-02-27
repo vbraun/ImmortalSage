@@ -1,0 +1,157 @@
+#!/usr/bin/env python
+
+import datetime
+import libvirt
+import sys
+import xml.etree.ElementTree as ET
+
+### Configuration
+#
+# The name of the virtual machine
+VIRTUAL_MACHINE = 'ImmortalSageWorker'
+
+# The storage pool where the vm is stored (use 'default' if you have
+# not defined your own storage pool)
+STORAGE_POOL = 'default'
+
+# The different snapshot generations
+# the dictionary key will be the snapshot name
+SNAPSHOT_GENERATIONS = {
+    'daily'  : datetime.timedelta(days=1),
+    'weekly' : datetime.timedelta(weeks=4),
+    'yearly' : datetime.timedelta(days=365)
+    }
+#
+### End of configuration
+
+
+class Snapshot(object):
+
+    def __init__(self, vm, snapshot):
+        self.vm = vm
+        self.snapshot = snapshot
+        
+    def xml(self):
+        try:
+            return self._xml
+        except AttributeError:
+            pass
+        source = self.snapshot.getXMLDesc(0)
+        parser = ET.XMLParser(encoding="utf-8")
+        self._xml = ET.fromstring(source, parser=parser)
+        return self._xml
+
+    def ctime(self):
+        t = self.xml().find('creationTime').text
+        return datetime.datetime.fromtimestamp(float(t))
+
+    def age(self):
+        return datetime.datetime.now() - self.ctime()
+
+    def name(self):
+        return self.snapshot.getName()
+
+    def __repr__(self):
+        s = self.snapshot.getName().ljust(20)
+        if self.snapshot.isCurrent(0):
+            s += ' *'
+        else:
+            s += '  '
+        s += '\t  ' + str(self.ctime())
+        return s
+    
+    def revert(self):
+        flags = libvirt.VIR_DOMAIN_SNAPSHOT_REVERT_RUNNING
+        self.vm.dom.revertToSnapshot(self.snapshot, flags)
+
+    def delete(self):
+        self.snapshot.delete(0)
+
+
+class VirtualMachine(object):
+    
+    def __init__(self, name, pool):
+        self.init_libvirt()
+        self.init_name(name)
+        self.init_pool(pool)
+
+    def init_libvirt(self):
+        self.conn = libvirt.open(None)
+        if self.conn is None:
+            raise OSError('Failed to open connection to the hypervisor')
+
+    def init_name(self, name):
+        self.name = name
+        self.dom = self.conn.lookupByName(self.name)
+
+    def init_pool(self, pool):
+        self.pool = pool
+        
+    def snapshots(self):
+        for s in self.dom.listAllSnapshots(0):
+            yield Snapshot(self, s)
+
+    def get_snapshot(self, name):
+        for s in self.snapshots():
+            if s.name() == name:
+                return s
+        raise ValueError('unknown snapshot name')
+
+    def latest_snapshot(self):
+        snaps = sorted([ (s.age(), s) for s in self.snapshots() ])
+        if len(snaps) == 0:
+            raise ValueError('no snapshot available')
+        return snaps[0][1]
+        
+    def __repr__(self):
+        r = '='*79 + '\n'
+        r += 'Snapshots for virtual machine '+self.name+':\n'
+        r += '-'*79 + '\n'
+        for s in self.snapshots():
+            r += str(s) + '\n'
+        r += '='*79
+        return r
+
+
+    def make_pending_snapshots(self, verbose=True):
+        for name, maxage in SNAPSHOT_GENERATIONS.iteritems():
+            try:
+                snap = self.get_snapshot(name)
+            except ValueError:
+                self.make_snapshot(name)
+                if verbose:
+                    print('Making initial snapshot for '+name)
+                continue
+            if snap.age() > maxage:
+                if verbose:
+                    print('Updating snapshot for '+name)
+                snap.delete()
+                self.make_snapshot(name)
+
+    def make_snapshot(self, name):
+        xmlDesc = '\n'.join([
+                '<domainsnapshot>',
+                '  <name>{0}</name>'.format(name),
+                '  <description>Automatic generational snapshop</description>',
+                '</domainsnapshot>'])
+        flags = \
+            libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
+        self.dom.snapshotCreateXML(xmlDesc, flags)
+        
+    
+    def is_running(self):
+        return self.dom.state(0)[0] == libvirt.VIR_DOMAIN_RUNNING
+
+
+    def ensure_running(self, verbose=True):
+        if not self.is_running():
+            if verbose:
+                print('virtual machine is not running, resuming last checkpoint')
+                self.latest_snapshot().revert()
+
+
+if __name__ == '__main__':
+    vm = VirtualMachine(VIRTUAL_MACHINE, STORAGE_POOL)
+    vm.ensure_running()
+    vm.make_pending_snapshots()
+    print vm
