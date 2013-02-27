@@ -99,7 +99,10 @@ class VirtualMachine(object):
         self.pool = pool
         
     def snapshots(self):
-        for s in self.dom.listAllSnapshots(0):
+        #for s in self.dom.listAllSnapshots(0):
+        #    yield Snapshot(self, s)
+        for n in self.dom.snapshotListNames(0):
+            s = self.dom.snapshotLookupByName(n, 0)
             yield Snapshot(self, s)
 
     def get_snapshot(self, name):
