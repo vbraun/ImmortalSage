@@ -64,7 +64,11 @@ class Snapshot(object):
 
     def __repr__(self):
         s = self.snapshot.getName().ljust(20)
-        if self.snapshot.isCurrent(0):
+        try:
+            is_current = self.snapshot.isCurrent(0)
+        except AttributeError:
+            is_current = False
+        if is_current:
             s += ' *'
         else:
             s += '  '
@@ -134,11 +138,11 @@ class VirtualMachine(object):
             except ValueError:
                 self.make_snapshot(name)
                 if verbose:
-                    print('Making initial snapshot for '+name)
+                    print('Making initial snapshot for {0} backup'.format(name))
                 continue
             if snap.age() > maxage:
                 if verbose:
-                    print('Updating snapshot for '+name)
+                    print('Updating snapshot for {0} backup'.format(name))
                 snap.delete()
                 self.make_snapshot(name)
 
@@ -148,8 +152,10 @@ class VirtualMachine(object):
                 '  <name>{0}</name>'.format(name),
                 '  <description>Automatic generational snapshop</description>',
                 '</domainsnapshot>'])
-        flags = \
-            libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
+        try:
+            flags = libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
+        except AttributeError:
+            flags = 0
         self.dom.snapshotCreateXML(xmlDesc, flags)
         
     
