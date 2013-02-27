@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 
+import os
 import datetime
 import libvirt
 import sys
 import xml.etree.ElementTree as ET
 
 ### Configuration
+#
+# Alternatively, you can put the configuration into a config.py file
+# that is in the current directory. The contents will be evaluated and
+# can overwrite the following variables.
 #
 # The name of the virtual machine
 VIRTUAL_MACHINE = 'ImmortalSageWorker'
@@ -23,6 +28,12 @@ SNAPSHOT_GENERATIONS = {
     }
 #
 ### End of configuration
+
+
+def load_local_config():
+    if not os.path.isfile('config.py'):
+        return
+    execfile('config.py', globals())
 
 
 class Snapshot(object):
@@ -151,6 +162,7 @@ class VirtualMachine(object):
 
 
 if __name__ == '__main__':
+    load_local_config()
     vm = VirtualMachine(VIRTUAL_MACHINE, STORAGE_POOL)
     vm.ensure_running()
     vm.make_pending_snapshots()

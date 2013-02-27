@@ -22,7 +22,9 @@ Each time the script runs,
 Configuration
 -------------
 
-To configure it see the comments at the top of the script.
+To configure it see the comments at the top of the
+script. Alternatively, you can put your configuration into a file
+named config.py in the working directory.
 
 
 Creating the Virtual Machine
@@ -46,7 +48,9 @@ For Fedora:
 
     yum install virt-viewer virt-manager libvirt-python
 
+For Ubuntu:
 
+    apt-get install virt-viewer virt-manager python-libvirt
 
 License
 -------
